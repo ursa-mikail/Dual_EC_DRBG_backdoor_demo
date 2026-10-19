@@ -233,5 +233,98 @@ def main():
     print(f"  Prediction succeeds? {hit}   (the secret d is what makes it work)")
 
 
+"""
+    # --- Control: attacker WITHOUT d
+    if drop >= 12:
+        print("\n[CONTROL] skipped for --bits >= 12 (would repeat the long search). "
+              "Run with a smaller --bits to see it.")
+        return
+
+    print(f"\n[CONTROL] Same attack with {args.trials} random wrong values for d:")
+    hits = 0
+    for k in range(1, args.trials + 1):
+        wrong_d = rng.randrange(2, n)
+        if wrong_d == d:                       # astronomically unlikely, but be safe
+            continue
+        bad = recover_state_candidates(blocks[0], wrong_d, drop)
+        hit = any(output_from_state(s, Q, drop) == blocks[1] for s in bad)
+        hits += hit
+        print(f"  wrong d #{k}: {len(bad)} candidates, prediction succeeds? {hit}")
+
+    print(f"\n  Result: {hits}/{args.trials} wrong values of d worked "
+          f"(the real d: 1/1)")
+"""
+"""
+Test 1: result=1, expected=1
+Test 2: result=0, expected=0
+Test 3: result=4, expected=4
+Test 4: result=4, expected=4
+Test 5: result=9, expected=9
+Test 6: result=4, expected=4
+Test 7: result=0, expected=0
+All tests passed.
+"""
+
+import sys
+
 if __name__ == "__main__":
-    main()
+    #sys.argv = ["dual_ec_demo.py", "--bits", "8", "--seed", "7"] # 16
+    #main()
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--bits", type=int, default=8,
+                    help="top bits dropped from each output (real Dual_EC = 16)")
+    ap.add_argument("--seed", type=int, default=None, help="RNG seed for repeatability")
+    ap.add_argument("--trials", type=int, default=5,
+                    help="number of random wrong d values to test in the control")
+    args, _ = ap.parse_known_args()      # was: ap.parse_args()
+    rng = random.Random(args.seed)
+    drop = args.bits
+
+"""
+ap.add_argument("--trials", type=int, default=5,
+                help="number of random wrong d values to test in the control")
+args, _ = ap.parse_known_args()
+"""
+
+
+"""
+================================================================
+ Dual_EC_DRBG backdoor demo   (curve: NIST P-256)
+================================================================
+
+[SETUP] Designer picks secret d and publishes P = d*Q
+  Q = G (public)
+  P = 0xb146da258d0458dee94acbd9... (public, looks random)
+  d = <kept secret>
+
+[VICTIM] Generator drops top 8 bits of each output (keeps 248).
+  output 1: e1cbe651ceb42967299a9549a73ea084a6f989825d8f8ff5...
+  output 2: 5121a899d03409d025853972e25f68b2fd433a89ec578574...
+  output 3: 961403444d5fa0ea903ec18b0b1023341260fc1546ebcfb8...
+  output 4: 15a5961eda9f4ff5b11afa2311b43931ca03f7357cd3e3d4...
+
+[ATTACKER] Sees output 1 and knows d. Brute-forcing 256 possible top-bit values...
+  141 candidate internal states (others were not on the curve)  [0.9s]
+  Exactly 1 candidate predicts output 2 correctly -> state recovered!
+
+[ATTACKER] Cloning the generator from the recovered state.
+  output 2: predicted == real?  True   (that is how we picked the winner)
+  Now predicting outputs 3 and 4 with NO further access to the victim:
+  output 3: predicted == real?  True
+  output 4: predicted == real?  True
+
+  >>> BACKDOOR WORKS: all future 'random' output is known. <<<
+
+[CONTROL] Same attack with a wrong guess for d:
+  Prediction succeeds? False   (the secret d is what makes it work)
+
+What each stage shows:
+- 256 guesses → 141 candidates. Dropping 8 bits means the attacker doesn’t know the top 8 bits of the point’s x-coordinate, so there are 256 possibilities. Roughly half of random x values have no matching y on the curve (the right-hand side of the curve equation isn’t a quadratic residue), so about 128 survive. Getting 141 is in line with that.
+- Exactly 1 winner. Each surviving candidate gives a guess at the next internal state. Only the true one reproduces output 2, so a single extra block disambiguates. With the real 16-bit drop, you’d have ~32,000 candidates instead of 141, and one more block still pins it down.
+- Outputs 3 and 4 predicted correctly. Once the attacker holds the internal state, the generator is deterministic, so every future output is known. That’s the practical consequence of the backdoor: one observed output block exposes the entire future stream.
+- Control fails. With a wrong d, the multiplication d*A no longer equals s·P, so none of the candidates predict output 2. The relationship P = d·Q is the whole backdoor.
+
+Why it matters historically: NIST SP 800-90A originally specified Dual_EC_DRBG with fixed constants P and Q and no explanation of how Q was chosen. In 2007, Shumow and Ferguson showed that whoever generated those constants could know a d linking them. Later reporting, including the Snowden documents, indicated the NSA likely did exactly that, and NIST withdrew the algorithm in 2014. The real attack has the same structure as your demo, just on a different curve and with the 16-bit search.
+
+"""
