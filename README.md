@@ -12,6 +12,7 @@ python3 dual_ec_demo.py --seed 7     # reproducible run
 
 > Educational only. Dual_EC_DRBG was withdrawn by NIST in 2014 and must not be used.
 
+![Ref: cryptographic-flaws-exploited](https://mikail-eliyah.medium.com/cryptographic-flaws-exploited-39c03c7c5a1a)
 ---
 
 ## 1. The generator in 30 seconds
